@@ -70,16 +70,17 @@ readargs() {
 }
 
 checkargs() {
-  if [ ! "${password}" ] ; then
-    echo "Missing password."
-    usage
-  fi
+#  if [ ! "${password}" ] ; then
+#    echo "Missing password."
+#    usage
+#  fi
+ :
 }
 
 setargs() {
-  if [ ! "${username}" ] ; then
-    username="root"
-  fi
+#  if [ ! "${username}" ] ; then
+#    username="root"
+#  fi
   if [ ! "${backuplocation}" ] ; then
     backuplocation="/tmp"
   fi
@@ -93,13 +94,33 @@ checkvalues() {
 }
 
 main() {
-  mysql -u ${username} -p${password} -B -N -e "show databases;" | while read database ; do
-    echo "Backing up mysql database for ${database}"
+  mysql -B -N -e "show databases;" | while read database ; do
+    datum=`date '+%Y-%m-%d %H:%M:%S'`
+    echo -n "${datum}: Backing up mysql database for ${database}: "
     prefix=`date +%Y%m%d_%H%M`
-   if [ "${compression}" ] ; then
-      mysqldump --extended-insert=FALSE -u ${username} -p${password} ${database} | sed '$ d' | gzip -9 > ${backuplocation}/${prefix}_${database}.mysql.gz 2> /dev/null
+    recent="${backuplocation}/${database}.recent"
+    if [ "${compression}" ] ; then
+      currentname="${prefix}_${database}.mysql.gz"
+      currentbackup="${backuplocation}/${currentname}"
+      mysqldump --extended-insert=FALSE ${database} | sed '$ d' | gzip -9 > ${currentbackup} 2> /dev/null
+      if [ -f ${backuplocation}/${database}.recent ] ; then
+        lastbackup=$(cat ${backuplocation}/${database}.recent)
+        zdiff --brief ${backuplocation}/daily/${lastbackup} ${currentbackup} > /dev/null 2>&1
+        if [ "$?" = 0 ] ; then
+          echo "no changes for this database."
+          rm ${currentbackup}
+        else
+          echo "moving ${currentname} to daily."
+          mv ${currentbackup} ${backuplocation}/daily/
+          echo "${currentname}" > ${recent}
+	fi
+      else
+        echo "no recent file found, moving ${currentname} to daily."
+        mv ${currentbackup} ${backuplocation}/daily/
+        echo "${currentname}" > ${recent}
+      fi
     else
-      mysqldump --extended-insert=FALSE -u ${username} -p${password} ${database} | sed '$ d' > ${backuplocation}/${prefix}_${database}.mysql 2> /dev/null
+      mysqldump --extended-insert=FALSE ${database} | sed '$ d' > ${backuplocation}/${prefix}_${database}.mysql 2> /dev/null
     fi
  done
 }
