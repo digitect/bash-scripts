@@ -1,21 +1,24 @@
 #!/bin/bash
 
-# A script to make a backup of all MySQL databases.
+# A script to make a backup of all SVN repositories.
 
 usage() {
-  echo "Usage: $0 [-p PATH] [-r REPOSITORY] [-b BACKUPLOCATION] [-c]"
+  echo "Usage: $0 [-p PATH] [-r REPOSITORY] [-b BACKUPLOCATION] [-v] [-c]"
   echo
   echo "  -p PATH"
   echo "    The path where the repositories are located."
   echo "    Default: /repos"
   echo "  -r REPOSITORY"
   echo "    The name of the repository to backup (without the path)."
-  echo "    Default: all repositories in PATH"
+  echo "    Default: all repositories (directories) in PATH"
   echo "  -b BACKUPLOCATION"
   echo "    The location to store the backups to."
   echo "    Default: /tmp"
+  echo "  -v"
+  echo "    Indicates that verification of the repository should be performed before backup. This takes more time!"
+  echo "    Default: no verification."
   echo "  -c"
-  echo "    Indicated compression (.zip) should be used."
+  echo "    Indicates that compression (.gz) should be used."
   echo "    Default: not compressed."
   exit 1
 }
@@ -40,6 +43,10 @@ readargs() {
           backuplocation="$2"
           shift ; shift
         fi
+      ;;
+      -v)
+        verification="yes"
+        shift
       ;;
       -c)
         compression="yes"
@@ -82,7 +89,7 @@ checkvalues() {
   fi
   if [ "$repository" != "*" ] ; then 
     if [ ! -d "${path}/${repository}" ] ; then       
-      echo "${path}${repository} is not a valid path with repository"
+      echo "${path}/${repository} is not a valid repository"
       usage
     fi
   fi
@@ -91,21 +98,25 @@ checkvalues() {
 main() {
   
   for repos in $path/$repository ; do
-    echo $repos
+    echo "Start processing repository: $repos"
     base=$(basename ${repos})
-    revcurr=$(svnadmin verify /repos/test 2>&1 | tail -1 | sed -e 's/[^0-9]//g')
     if [ -f ${backuplocation}/${base}.recent ] ; then
       revlast=$(cat ${backuplocation}/${base}.recent)
-       if [ "${revlast}" == "${revcurr}" ]; then
+      if [ "${verification}" ] ; then
+        revcurr=$(svnadmin verify ${repos} 2>&1 | tail -1 | sed -e 's/[^0-9]//g')
+      else
+        revcurr=$(svnlook youngest ${repos})
+      fi
+      if [ "${revlast}" == "${revcurr}" ]; then
         echo "No changes for repository ${repos}."
       else
-        echo "Repository ${repos} updated from revision ${revlast} to ${revcurr}"
         if [ "${compression}" ] ; then
           svnadmin dump ${repos} | gzip -9 > ${backuplocation}/${base}.dump.gz
         else
           svnadmin dump ${repos} > ${backuplocation}/${base}.dump
         fi
         echo "${revcurr}" > ${backuplocation}/${base}.recent
+        echo "Repository ${repos} updated from revision ${revlast} to ${revcurr}"
       fi
     else
       echo "No recent file found for ${repos}, last backed up revision set to 0."
