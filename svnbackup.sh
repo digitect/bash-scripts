@@ -97,7 +97,11 @@ checkvalues() {
 
 main() {
   
+  prog="svnbackup"
+  datum=$(date '+%Y-%m-%d %H:%M:%S')
+  echo "${datum} ${prog}: Start backup SVN repositories from '${path}' to '${backuplocation}"
   for repos in $path/$repository ; do
+    datum=$(date '+%Y-%m-%d %H:%M:%S')
     echo "Start processing repository: $repos"
     base=$(basename ${repos})
     if [ -f ${backuplocation}/${base}.recent ] ; then
@@ -108,21 +112,40 @@ main() {
         revcurr=$(svnlook youngest ${repos})
       fi
       if [ "${revlast}" == "${revcurr}" ]; then
-        echo "No changes for repository ${repos}."
+        echo "${datum} ${prog}: No changes for repository ${repos}."
       else
+        # Naar een tijdelijk bestand schrijven en pas verplaatsen als het gelukt is.
+        # Met '>' rechtstreeks op het doel is de vorige dump al afgekapt voordat
+        # svnadmin begint; mislukt hij dan, dan is de enige kopie een halve dump.
         if [ "${compression}" ] ; then
-          svnadmin dump ${repos} | gzip -9 > ${backuplocation}/${base}.dump.gz
+          doel="${backuplocation}/${base}.dump.gz"
+          svnadmin dump ${repos} | gzip -9 > "${doel}.tmp"
+          rc=${PIPESTATUS[0]}
+          [ "$rc" -eq 0 ] && gzip -t "${doel}.tmp" 2>/dev/null || rc=1
         else
-          svnadmin dump ${repos} > ${backuplocation}/${base}.dump
+          doel="${backuplocation}/${base}.dump"
+          svnadmin dump ${repos} > "${doel}.tmp"
+          rc=$?
         fi
-        echo "${revcurr}" > ${backuplocation}/${base}.recent
-        echo "Repository ${repos} updated from revision ${revlast} to ${revcurr}"
+
+        if [ "$rc" -eq 0 ] && [ -s "${doel}.tmp" ] ; then
+          mv -f "${doel}.tmp" "${doel}"
+          # .recent pas bijwerken als de dump er echt staat, anders slaat de
+          # volgende ronde deze repository over en ontstaat er een stil gat.
+          echo "${revcurr}" > ${backuplocation}/${base}.recent
+          echo "${datum} ${prog}: Repository ${repos} updated from revision ${revlast} to ${revcurr}"
+        else
+          rm -f "${doel}.tmp"
+          echo "${datum} ${prog}: FOUT - dump van ${repos} mislukt, vorige back-up blijft staan"
+        fi
       fi
     else
-      echo "No recent file found for ${repos}, last backed up revision set to 0."
+      echo "${datum} ${prog}: No recent file found for ${repos}, last backed up revision set to 0."
       echo "0" > ${backuplocation}/${base}.recent
     fi
   done
+  datum=$(date '+%Y-%m-%d %H:%M:%S')
+  echo "${datum}: End backup SVN repositories"
 }
 
 readargs "$@"
