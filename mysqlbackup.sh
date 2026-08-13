@@ -95,6 +95,13 @@ checkvalues() {
 
 main() {
   mysql -B -N -e "show databases;" | while read database ; do
+    # information_schema en performance_schema zijn virtuele databases: mysqldump
+    # loopt er altijd op stuk met "LOCK TABLES command denied" en levert een leeg
+    # bestandje van een paar honderd bytes op. Er valt niets uit terug te zetten,
+    # dus overslaan in plaats van elke nacht laten mislukken.
+    case "${database}" in
+      information_schema|performance_schema) continue ;;
+    esac
     datum=`date '+%Y-%m-%d %H:%M:%S'`
     echo -n "${datum}: Backing up mysql database for ${database}: "
     prefix=`date +%Y%m%d_%H%M`
