@@ -10,6 +10,11 @@
 #   Optionally, tar and tar.gz files can be saved in different locations.
 # ./grav_user_backup.sh -g /home/joppe/digitect.nl/grav -b /private/backup/grav/prod25.digitect.nl/daily -t /mnt/backups/grav/tar -s mysite
 
+# Version, bumped on every change (see README.md). Deployments compare it with this
+# repository, so a changed script without a new number shows up as a difference.
+#   1.0  first numbered version
+VERSION="1.0"
+
 usage() {
   echo "Usage: $0 -g /path/to/grav -b /path/to/gz-backups [-t /path/to/tar-backups] [-s sitename] [-d subdir] [-n name] [-x \"excludes\"] [-r partname]"
   echo

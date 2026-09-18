@@ -2,6 +2,11 @@
 
 # A script to make a backup of all SVN repositories.
 
+# Version, bumped on every change (see README.md). Deployments compare it with this
+# repository, so a changed script without a new number shows up as a difference.
+#   1.0  first numbered version
+VERSION="1.0"
+
 usage() {
   echo "Usage: $0 [-p PATH] [-r REPOSITORY] [-b BACKUPLOCATION] [-v] [-c]"
   echo
