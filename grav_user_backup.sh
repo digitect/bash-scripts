@@ -13,7 +13,8 @@
 # Version, bumped on every change (see README.md). Deployments compare it with this
 # repository, so a changed script without a new number shows up as a difference.
 #   1.0  first numbered version
-VERSION="1.0"
+#   1.1  a tar error (unreadable file) now ends with exit 1; -x also works below -d user
+VERSION="1.1"
 
 usage() {
   echo "Usage: $0 -g /path/to/grav -b /path/to/gz-backups [-t /path/to/tar-backups] [-s sitename] [-d subdir] [-n name] [-x \"excludes\"] [-r partname]"
@@ -32,8 +33,9 @@ usage() {
   echo "    Two parts of the same site must have different names or they overwrite"
   echo "    each other's reference tar."
   echo "  -x \"NAME NAME ...\""
-  echo "    Space-separated names to leave out. Only useful with -d '.', to keep the"
-  echo "    variable and the regenerable directories out of the fixed part."
+  echo "    Space-separated paths, relative to SUBDIR, to leave out. With -d '.' this"
+  echo "    keeps the variable and the regenerable directories out of the fixed part;"
+  echo "    with the default subdir it can skip files that should not be backed up."
   echo "  -r PARTNAME (optional)"
   echo "    Also record, in this part's .recent file, the newest stored backup of"
   echo "    that other part. Use '-r core' on the variable part to note which fixed"
@@ -77,9 +79,10 @@ setargs() {
   if [ -z "${partname:-}" ]; then
     if [ "$subdir" = "." ]; then partname="core"; else partname="$subdir"; fi
   fi
-  # Uitsluitingen omzetten naar --exclude-opties voor tar.
+  # Uitsluitingen omzetten naar --exclude-opties voor tar. De namen in het archief
+  # beginnen met de submap ('./' bij -d .), dus die komt ervoor.
   tar_excludes=""
-  for e in ${excludes:-}; do tar_excludes="$tar_excludes --exclude=./$e"; done
+  for e in ${excludes:-}; do tar_excludes="$tar_excludes --exclude=$subdir/$e"; done
 
   if [ -z "$sitename" ]; then
     sitename=$(basename "$grav_path")
@@ -139,6 +142,14 @@ checkvalues() {
 main() {
   echo "Creating tar of '$user_dir'..."
   tar -cf "$new_tar" -C "$grav_path" $tar_excludes "$subdir"
+  tar_rc=$?
+  # Code 1: een bestand veranderde tijdens het lezen; het archief is bruikbaar.
+  # Code 2 of hoger: iets ontbreekt (bijvoorbeeld een onleesbaar bestand). Het
+  # archief wordt toch bewaard, want de rest is wel gelezen, maar het script
+  # eindigt met een fout zodat het opvalt in plaats van alleen in het log te staan.
+  if [ "$tar_rc" -ge 2 ]; then
+    echo "ERROR: tar exited with code $tar_rc; the backup below is incomplete."
+  fi
 
   latest_tar=$(find "$tar_path" -name "*${sitename}-${partname}.tar" | sort | tail -n 1)
 
@@ -171,6 +182,7 @@ main() {
   echo "State written to $recent_file"
 
   rm -rf "$tmp_dir"
+  if [ "$tar_rc" -ge 2 ]; then exit 1; fi
 }
 
 readargs "$@"
